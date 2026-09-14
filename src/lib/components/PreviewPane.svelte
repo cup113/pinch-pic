@@ -31,6 +31,8 @@
 
   const session = new PreviewSession();
   let loadedJobId: string | null = null;
+  let lastOutW = 0;
+  let lastOutH = 0;
 
   const plan = $derived(srcMeta && job ? planResize(srcMeta, job.params.maxEdge) : null);
   const outW = $derived(plan?.outW ?? 0);
@@ -75,6 +77,16 @@
       fit();
       needsFit = false;
     }
+  });
+
+  $effect(() => {
+    const w = outW;
+    const h = outH;
+    if (w < 1 || h < 1) return;
+    if (w === lastOutW && h === lastOutH) return;
+    lastOutW = w;
+    lastOutH = h;
+    needsFit = true;
   });
 
   $effect(() => {
