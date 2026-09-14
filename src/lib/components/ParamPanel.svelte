@@ -1,71 +1,12 @@
 <script lang="ts">
   import { jobStore } from '../stores/jobs.svelte';
-  import { planResize } from '../pipeline';
-  import { FORMAT_LABELS, isLossy, type ImageJob, type OutputFormat } from '../types';
+  import ParamsEditor from './ParamsEditor.svelte';
+  import type { ImageJob } from '../types';
 
   let { job }: { job: ImageJob | null } = $props();
 
-  const FORMATS: OutputFormat[] = ['jpeg', 'webp', 'avif', 'png'];
-
-  const sourceLong = $derived(job?.source ? Math.max(job.source.width, job.source.height) : null);
-  const sliderMax = $derived(sourceLong ?? 4096);
-  const edgeValue = $derived(job?.params.maxEdge ?? sliderMax);
-  const outputSize = $derived(job?.source ? planResize(job.source, job.params.maxEdge) : null);
-
-  const fractions = $derived.by(() => {
-    if (!sourceLong) return [] as { label: string; value: number }[];
-    return [
-      { label: '1/2', value: Math.round(sourceLong / 2) },
-      { label: '1/4', value: Math.round(sourceLong / 4) },
-    ];
-  });
-
-  const presets = $derived.by(() => {
-    if (!sourceLong) return [] as number[];
-    const values: number[] = [];
-    for (let n = 1; n <= 5; n++) values.push(384 * n);
-    for (let value = 2304; value <= sourceLong; value += 768) values.push(value);
-    return values.filter((value) => value <= sourceLong);
-  });
-
-  function setFormat(format: OutputFormat) {
-    if (!job) return;
-    jobStore.setParams(job.id, { format, keepExif: format === 'jpeg' ? job.params.keepExif : false });
-  }
-
-  function setQuality(quality: number) {
-    if (!job) return;
-    jobStore.setParams(job.id, { quality });
-  }
-
-  function setEffort(effort: number) {
-    if (!job) return;
-    jobStore.setParams(job.id, { effort });
-  }
-
-  function setEdge(value: number | null) {
-    if (!job) return;
-    jobStore.setParams(job.id, { maxEdge: value });
-  }
-
-  function setEdgeFromSlider(raw: number) {
-    setEdge(raw >= sliderMax ? null : raw);
-  }
-
-  function setMaxEdge(raw: string) {
-    if (!job) return;
-    const parsed = Number.parseInt(raw, 10);
-    setEdge(Number.isFinite(parsed) && parsed > 0 ? parsed : null);
-  }
-
-  function toggleExif(keep: boolean) {
-    if (!job) return;
-    jobStore.setParams(job.id, { keepExif: keep });
-  }
-
   function applyToAll() {
-    if (!job) return;
-    jobStore.applyAll(job.params);
+    if (job) jobStore.applyAll(job.params);
   }
 </script>
 
@@ -82,157 +23,12 @@
   </div>
 
   {#if job}
-    <div class="space-y-2">
-      <span class="text-xs font-medium text-ink-600">格式</span>
-      <div class="grid grid-cols-4 gap-1 rounded-lg bg-ink-100 p-1">
-        {#each FORMATS as format (format)}
-          <button
-            type="button"
-            class="rounded-md px-2 py-1.5 text-xs font-medium transition
-              {job.params.format === format
-                ? 'bg-white text-brand-600 shadow-sm'
-                : 'text-ink-500 hover:text-ink-800'}"
-            onclick={() => setFormat(format)}
-          >
-            {FORMAT_LABELS[format]}
-          </button>
-        {/each}
-      </div>
-    </div>
-
-    {#if isLossy(job.params.format)}
-      <div class="space-y-2">
-        <div class="flex items-baseline justify-between">
-          <span class="text-xs font-medium text-ink-600">质量</span>
-          <span class="text-xs tabular-nums text-ink-500">{job.params.quality}</span>
-        </div>
-        <input
-          type="range"
-          min="0"
-          max="100"
-          value={job.params.quality}
-          oninput={(event) => setQuality(Number(event.currentTarget.value))}
-          class="w-full accent-brand-500"
-        />
-      </div>
-    {:else}
-      <div class="space-y-2">
-        <div class="flex items-baseline justify-between">
-          <span class="text-xs font-medium text-ink-600">优化力度</span>
-          <span class="text-xs tabular-nums text-ink-500">{job.params.effort}</span>
-        </div>
-        <input
-          type="range"
-          min="1"
-          max="6"
-          value={job.params.effort}
-          oninput={(event) => setEffort(Number(event.currentTarget.value))}
-          class="w-full accent-brand-500"
-        />
-        <p class="text-xs text-ink-400">PNG 为无损，只优化体积，不损失画质。</p>
-      </div>
-    {/if}
-
-    <div class="space-y-3">
-      <div class="flex items-baseline justify-between">
-        <span class="text-xs font-medium text-ink-600">长边像素</span>
-        {#if outputSize}
-          <span class="text-xs tabular-nums text-ink-500">{outputSize.outW}×{outputSize.outH}</span>
-        {:else if job.params.maxEdge === null}
-          <span class="text-xs text-ink-400">原尺寸</span>
-        {/if}
-      </div>
-
-      {#if sourceLong && sourceLong > 64}
-        <input
-          type="range"
-          min="64"
-          max={sliderMax}
-          step="1"
-          value={edgeValue}
-          oninput={(event) => setEdgeFromSlider(Number(event.currentTarget.value))}
-          class="w-full accent-brand-500"
-        />
-
-        <div class="flex items-center gap-2">
-          <input
-            type="number"
-            min="1"
-            step="1"
-            placeholder="原尺寸"
-            value={job.params.maxEdge ?? ''}
-            oninput={(event) => setMaxEdge(event.currentTarget.value)}
-            class="w-24 rounded-lg border border-ink-200 px-2 py-1 text-sm tabular-nums outline-none focus:border-brand-500"
-          />
-          <span class="text-xs text-ink-400">px · 留空 = 原尺寸</span>
-        </div>
-
-        <div class="flex flex-wrap gap-1">
-          <button
-            type="button"
-            onclick={() => setEdge(null)}
-            class="rounded-md border px-2 py-1 text-xs transition
-              {job.params.maxEdge === null
-                ? 'border-brand-500 bg-brand-500/10 text-brand-600'
-                : 'border-ink-200 text-ink-600 hover:border-brand-500 hover:text-brand-600'}"
-          >
-            原尺寸
-          </button>
-          {#each fractions as fraction (fraction.label)}
-            <button
-              type="button"
-              onclick={() => setEdge(fraction.value)}
-              class="rounded-md border px-2 py-1 text-xs tabular-nums transition
-                {job.params.maxEdge === fraction.value
-                  ? 'border-brand-500 bg-brand-500/10 text-brand-600'
-                  : 'border-ink-200 text-ink-600 hover:border-brand-500 hover:text-brand-600'}"
-            >
-              {fraction.label}
-            </button>
-          {/each}
-          {#each presets as value (value)}
-            <button
-              type="button"
-              onclick={() => setEdge(value)}
-              class="rounded-md border px-2 py-1 text-xs tabular-nums transition
-                {job.params.maxEdge === value
-                  ? 'border-brand-500 bg-brand-500/10 text-brand-600'
-                  : 'border-ink-200 text-ink-600 hover:border-brand-500 hover:text-brand-600'}"
-            >
-              {value}
-            </button>
-          {/each}
-        </div>
-
-        <p class="text-xs text-ink-400">只缩不放，等比不留白。</p>
-      {:else}
-        <p class="text-xs text-ink-400">正在测量原图尺寸…</p>
-      {/if}
-    </div>
-
-    {#if job.params.format === 'jpeg'}
-      <label class="flex items-start gap-2 rounded-lg bg-ink-50 p-3">
-        <input
-          type="checkbox"
-          checked={job.params.keepExif}
-          onchange={(event) => toggleExif(event.currentTarget.checked)}
-          class="mt-0.5 accent-brand-500"
-        />
-        <span class="text-xs text-ink-600">
-          保留 EXIF 元数据（含 GPS、拍摄参数）
-          <span class="mt-0.5 block text-ink-400">仅 JPEG 输出支持；不勾选则全部抹除，方向已烘进像素。</span>
-        </span>
-      </label>
-    {:else}
-      <p class="rounded-lg bg-ink-50 p-3 text-xs text-ink-400">
-        默认已抹除全部元数据（含 GPS）；保留 EXIF 仅 JPEG 输出支持。
-      </p>
-    {/if}
+    <ParamsEditor {job} />
 
     <button
       type="button"
       onclick={applyToAll}
-      class="w-full rounded-lg border border-ink-200 px-3 py-2 text-xs font-medium text-ink-700 transition hover:border-brand-500 hover:text-brand-600"
+      class="rounded-lg border border-ink-200 px-3 py-2 text-xs font-medium text-ink-700 transition hover:border-brand-500 hover:text-brand-600"
     >
       应用到全部作业
     </button>

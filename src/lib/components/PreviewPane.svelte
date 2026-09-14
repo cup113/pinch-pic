@@ -1,8 +1,11 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
+  import { artifactName, downloadBlob } from '../download';
+  import { formatBytes, formatPercent, savingsPercent } from '../format';
   import { decodeToBitmap, planResize } from '../pipeline';
   import { PreviewSession } from '../previewSession';
   import { jobStore } from '../stores/jobs.svelte';
+  import ParamsEditor from './ParamsEditor.svelte';
   import { FORMAT_LABELS, type CompressParams, type CropRect, type ImageJob, type ImageSize } from '../types';
 
   let { job }: { job: ImageJob | null } = $props();
@@ -357,10 +360,14 @@
   function resetDivider() {
     dividerFrac = 0.5;
   }
+
+  function download() {
+    if (job?.artifact) downloadBlob(job.artifact, artifactName(job));
+  }
 </script>
 
 <div class="relative flex h-full min-h-0 flex-col bg-ink-100">
-  <header class="flex items-center justify-between gap-2 border-b border-ink-200 bg-white px-3 py-2 sm:px-4">
+  <header class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-200 bg-white px-3 py-2 sm:px-4">
     <div class="flex items-center gap-2">
       <span class="text-xs font-semibold text-ink-800">细节预览</span>
       {#if loading}
@@ -370,11 +377,23 @@
         <span class="text-xs text-red-500">{error}</span>
       {/if}
     </div>
-    <div class="flex items-center gap-1">
-      <span class="px-1 text-xs tabular-nums text-ink-500">{Math.round(zoom * 100)}%</span>
-      <button type="button" onclick={fit} class="rounded-md border border-ink-200 px-2 py-1 text-xs text-ink-600 transition hover:border-brand-500 hover:text-brand-600">适应</button>
-      <button type="button" onclick={zoomToOne} class="rounded-md border border-ink-200 px-2 py-1 text-xs text-ink-600 transition hover:border-brand-500 hover:text-brand-600">1:1</button>
-      <button type="button" onclick={resetDivider} class="rounded-md border border-ink-200 px-2 py-1 text-xs text-ink-600 transition hover:border-brand-500 hover:text-brand-600">中线</button>
+    <div class="flex items-center gap-2">
+      {#if job && job.artifactSize !== null}
+        <span class="text-xs tabular-nums text-ink-500">
+          {formatBytes(job.artifactSize)}
+          <span class="text-emerald-600">{formatPercent(savingsPercent(job.file.size, job.artifactSize))}</span>
+        </span>
+      {:else if job}
+        <span class="text-xs text-ink-400">压缩中…</span>
+      {/if}
+      <button
+        type="button"
+        onclick={download}
+        disabled={!job?.artifact}
+        class="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        下载
+      </button>
     </div>
   </header>
 
@@ -405,7 +424,21 @@
     {/if}
   </div>
 
-  <footer class="border-t border-ink-200 bg-white px-3 py-1.5 text-[11px] text-ink-400 sm:px-4">
-    滚轮或双指缩放 · 拖拽平移 · 拖动中线左右对比
+  {#if job}
+    <div class="border-t border-ink-200 bg-white px-3 py-2 sm:px-4">
+      <ParamsEditor {job} compact />
+    </div>
+  {/if}
+
+  <footer class="flex items-center justify-between gap-2 border-t border-ink-200 bg-white px-3 py-1.5 sm:px-4">
+    <span class="hidden truncate text-[11px] text-ink-400 sm:block">
+      滚轮或双指缩放 · 拖拽平移 · 拖动中线左右对比
+    </span>
+    <div class="flex items-center gap-1">
+      <span class="px-1 text-xs tabular-nums text-ink-500">{Math.round(zoom * 100)}%</span>
+      <button type="button" onclick={fit} class="rounded-md border border-ink-200 px-2 py-1 text-xs text-ink-600 transition hover:border-brand-500 hover:text-brand-600">适应</button>
+      <button type="button" onclick={zoomToOne} class="rounded-md border border-ink-200 px-2 py-1 text-xs text-ink-600 transition hover:border-brand-500 hover:text-brand-600">1:1</button>
+      <button type="button" onclick={resetDivider} class="rounded-md border border-ink-200 px-2 py-1 text-xs text-ink-600 transition hover:border-brand-500 hover:text-brand-600">中线</button>
+    </div>
   </footer>
 </div>
