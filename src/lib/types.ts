@@ -46,9 +46,16 @@ export const DEFAULT_PARAMS: CompressParams = {
 export interface ImageMeta {
   width: number;
   height: number;
+  sourceWidth: number;
+  sourceHeight: number;
   size: number;
   type: string;
   firstFrameOnly: boolean;
+}
+
+export interface ImageSize {
+  width: number;
+  height: number;
 }
 
 export type JobStatus = 'queued' | 'encoding' | 'done' | 'error';
@@ -59,6 +66,7 @@ export interface ImageJob {
   name: string;
   ext: string;
   meta: ImageMeta | null;
+  source: ImageSize | null;
   params: CompressParams;
   status: JobStatus;
   artifact: Blob | null;

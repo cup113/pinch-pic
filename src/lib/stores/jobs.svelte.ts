@@ -43,6 +43,7 @@ class JobStore {
         name,
         ext,
         meta: null,
+        source: null,
         params: { ...this.globalDefault },
         status: 'queued',
         artifact: null,
@@ -57,6 +58,13 @@ class JobStore {
 
   select(jobId: string): void {
     this.selectedId = jobId;
+  }
+
+  setSourceDims(jobId: string, width: number, height: number): void {
+    const job = this.jobs.find((item) => item.id === jobId);
+    if (!job) return;
+    if (job.source && job.source.width === width && job.source.height === height) return;
+    job.source = { width, height };
   }
 
   setParams(jobId: string, patch: Partial<CompressParams>): void {
@@ -111,6 +119,7 @@ class JobStore {
       const output = await this.#getPool().submit(job.id, job.file, params);
       if (this.#generations.get(job.id) !== generation) return;
       job.meta = output.meta;
+      this.setSourceDims(job.id, output.meta.sourceWidth, output.meta.sourceHeight);
 
       const artifact =
         params.keepExif && params.format === 'jpeg'

@@ -4,6 +4,8 @@
   import { formatBytes, formatPercent, savingsPercent } from '../format';
   import { FORMAT_LABELS, type ImageJob } from '../types';
 
+  let { onselect }: { onselect?: () => void } = $props();
+
   let zipping = $state(false);
 
   async function downloadAll() {
@@ -21,8 +23,8 @@
   }
 </script>
 
-<section class="flex h-full flex-col border-r border-ink-200 bg-white">
-  <header class="flex items-center justify-between gap-3 border-b border-ink-200 px-4 py-3">
+<section class="flex h-full flex-col bg-white lg:border-r lg:border-ink-200">
+  <header class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-200 px-4 py-3">
     <div>
       <h2 class="text-sm font-semibold text-ink-900">
         作业 <span class="font-normal text-ink-400">{jobStore.jobs.length}</span>
@@ -70,7 +72,10 @@
               <button
                 type="button"
                 class="min-w-0 flex-1 text-left"
-                onclick={() => jobStore.select(job.id)}
+                onclick={() => {
+                  jobStore.select(job.id);
+                  onselect?.();
+                }}
               >
                 <span class="block truncate text-sm text-ink-900">{job.file.name}</span>
                 <span class="mt-0.5 block text-xs tabular-nums text-ink-500">
@@ -99,7 +104,7 @@
                 onclick={() => downloadOne(job)}
                 disabled={!job.artifact}
                 title="下载"
-                class="rounded-md border border-ink-200 px-2 py-1 text-xs text-ink-500 transition hover:border-brand-500 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-30"
+                class="rounded-md border border-ink-200 px-3 py-2 text-xs text-ink-500 transition hover:border-brand-500 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-30 sm:px-2 sm:py-1"
               >
                 ↓
               </button>
@@ -107,7 +112,7 @@
                 type="button"
                 onclick={() => jobStore.remove(job.id)}
                 title="移除"
-                class="rounded-md px-2 py-1 text-xs text-ink-400 transition hover:text-red-500"
+                class="rounded-md px-3 py-2 text-xs text-ink-400 transition hover:text-red-500 sm:px-2 sm:py-1"
               >
                 ✕
               </button>

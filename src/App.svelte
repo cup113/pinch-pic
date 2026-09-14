@@ -5,8 +5,16 @@
   import PreviewPane from './lib/components/PreviewPane.svelte';
   import { jobStore } from './lib/stores/jobs.svelte';
 
+  type Tab = 'jobs' | 'preview' | 'params';
+  const TABS: { id: Tab; label: string }[] = [
+    { id: 'jobs', label: '作业' },
+    { id: 'preview', label: '预览' },
+    { id: 'params', label: '参数' },
+  ];
+
   let dragging = $state(false);
   let dragDepth = 0;
+  let tab = $state<Tab>('jobs');
   let input = $state<HTMLInputElement | undefined>();
 
   const selected = $derived(jobStore.selected);
@@ -14,7 +22,10 @@
   function acceptFiles(list: FileList | null | undefined) {
     if (!list) return;
     const images = Array.from(list).filter((file) => file.type.startsWith('image/'));
-    if (images.length > 0) jobStore.addFiles(images);
+    if (images.length > 0) {
+      jobStore.addFiles(images);
+      tab = 'jobs';
+    }
   }
 
   function onDrop(event: DragEvent) {
@@ -49,25 +60,50 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="flex h-full flex-col" ondragenter={onDragEnter} ondragleave={onDragLeave}>
-  <header class="flex items-center justify-between border-b border-ink-200 bg-white px-4 py-3">
-    <div class="flex items-baseline gap-3">
+  <header class="flex items-center justify-between gap-2 border-b border-ink-200 bg-white px-3 py-2.5 sm:px-4 sm:py-3">
+    <div class="flex min-w-0 items-baseline gap-3">
       <h1 class="text-base font-semibold tracking-tight text-ink-900">pinch-pic</h1>
-      <span class="text-xs text-ink-400">WASM 本地编码 · 文件不出本机 · 默认抹除元数据</span>
+      <span class="hidden truncate text-xs text-ink-400 sm:inline">
+        WASM 本地编码 · 文件不出本机 · 默认抹除元数据
+      </span>
     </div>
     <button
       type="button"
       onclick={() => input?.click()}
-      class="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-brand-600"
+      class="shrink-0 rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-brand-600"
     >
       添加图片
     </button>
   </header>
 
-  <main class="grid min-h-0 flex-1 grid-cols-[320px_minmax(0,1fr)_300px]">
-    <JobList />
-    <PreviewPane job={selected} />
-    <ParamPanel job={selected} />
+  <main class="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)] lg:grid-cols-[320px_minmax(0,1fr)_300px]">
+    <div class="min-h-0 overflow-hidden {tab !== 'jobs' ? 'hidden lg:block' : ''}">
+      <JobList onselect={() => (tab = 'preview')} />
+    </div>
+    <div class="min-h-0 overflow-hidden {tab !== 'preview' ? 'hidden lg:block' : ''}">
+      <PreviewPane job={selected} />
+    </div>
+    <div class="min-h-0 overflow-hidden {tab !== 'params' ? 'hidden lg:block' : ''}">
+      <ParamPanel job={selected} />
+    </div>
   </main>
+
+  <nav class="grid grid-cols-3 border-t border-ink-200 bg-white pb-[env(safe-area-inset-bottom)] lg:hidden">
+    {#each TABS as item (item.id)}
+      <button
+        type="button"
+        onclick={() => (tab = item.id)}
+        aria-current={tab === item.id ? 'page' : undefined}
+        class="flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition
+          {tab === item.id ? 'text-brand-600' : 'text-ink-500 hover:text-ink-800'}"
+      >
+        {item.label}
+        {#if item.id === 'jobs' && jobStore.jobs.length > 0}
+          <span class="text-ink-400">{jobStore.jobs.length}</span>
+        {/if}
+      </button>
+    {/each}
+  </nav>
 
   <input
     bind:this={input}

@@ -22,6 +22,8 @@ scope.onmessage = async (event) => {
         meta: {
           width: source.width,
           height: source.height,
+          sourceWidth: source.width,
+          sourceHeight: source.height,
           size: message.file.size,
           type: message.file.type,
           firstFrameOnly: message.file.type === 'image/gif',

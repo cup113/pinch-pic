@@ -2,7 +2,8 @@
   import { onDestroy, onMount } from 'svelte';
   import { decodeToBitmap, planResize } from '../pipeline';
   import { PreviewSession } from '../previewSession';
-  import { FORMAT_LABELS, type CompressParams, type CropRect, type ImageJob } from '../types';
+  import { jobStore } from '../stores/jobs.svelte';
+  import { FORMAT_LABELS, type CompressParams, type CropRect, type ImageJob, type ImageSize } from '../types';
 
   let { job }: { job: ImageJob | null } = $props();
 
@@ -11,16 +12,19 @@
   let zoom = $state(1);
   let originX = $state(0);
   let originY = $state(0);
+  let dividerFrac = $state(0.5);
+  let nearDivider = $state(false);
+  let mode = $state<'none' | 'pan' | 'divider' | 'pinch'>('none');
 
   let src = $state<ImageBitmap | null>(null);
-  let srcMeta = $state<{ width: number; height: number } | null>(null);
+  let srcMeta = $state<ImageSize | null>(null);
   let preview = $state<{ bitmap: ImageBitmap; rect: CropRect } | null>(null);
   let error = $state<string | null>(null);
   let loading = $state(false);
   let needsFit = $state(false);
 
-  let canvasL = $state<HTMLCanvasElement | undefined>();
-  let canvasR = $state<HTMLCanvasElement | undefined>();
+  let canvas = $state<HTMLCanvasElement | undefined>();
+  let stage = $state<HTMLDivElement | undefined>();
 
   const session = new PreviewSession();
   let loadedJobId: string | null = null;
@@ -29,10 +33,14 @@
   const outW = $derived(plan?.outW ?? 0);
   const outH = $derived(plan?.outH ?? 0);
   const outScale = $derived(plan?.scale ?? 1);
+  const cursor = $derived(
+    mode === 'pan' ? 'cursor-grabbing' : nearDivider ? 'cursor-col-resize' : 'cursor-grab',
+  );
 
   onMount(() => {
-    session.onSource = (_jobId, meta) => {
+    session.onSource = (jobId, meta) => {
       srcMeta = { width: meta.width, height: meta.height };
+      jobStore.setSourceDims(jobId, meta.sourceWidth, meta.sourceHeight);
     };
     session.onPreview = (bitmap, rect) => {
       preview = { bitmap, rect };
@@ -91,6 +99,7 @@
       src?.close();
       src = bitmap;
       srcMeta = { width: bitmap.width, height: bitmap.height };
+      jobStore.setSourceDims(id, bitmap.width, bitmap.height);
       needsFit = true;
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
@@ -119,34 +128,28 @@
   }
 
   function draw(): void {
+    const el = canvas;
+    if (!el || viewW < 1 || viewH < 1) return;
+
     const dpr = window.devicePixelRatio || 1;
-    drawPane(canvasL, dpr, (ctx) => {
-      if (!src || !srcMeta) return;
-      const visW = viewW / zoom;
-      const visH = viewH / zoom;
-      const left = Math.max(0, originX);
-      const top = Math.max(0, originY);
-      const right = Math.min(outW, originX + visW);
-      const bottom = Math.min(outH, originY + visH);
-      const w = right - left;
-      const h = bottom - top;
-      if (w <= 0 || h <= 0) return;
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(
-        src,
-        left / outScale,
-        top / outScale,
-        w / outScale,
-        h / outScale,
-        (left - originX) * zoom,
-        (top - originY) * zoom,
-        w * zoom,
-        h * zoom,
-      );
-    });
-    drawPane(canvasR, dpr, (ctx) => {
-      if (!preview) return;
+    const pxW = Math.round(viewW * dpr);
+    const pxH = Math.round(viewH * dpr);
+    if (el.width !== pxW) el.width = pxW;
+    if (el.height !== pxH) el.height = pxH;
+
+    const ctx = el.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, viewW, viewH);
+
+    drawSource(ctx);
+
+    const dividerX = dividerFrac * viewW;
+    if (preview) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(dividerX, 0, viewW - dividerX, viewH);
+      ctx.clip();
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(
@@ -156,24 +159,64 @@
         preview.rect.width * zoom,
         preview.rect.height * zoom,
       );
-    });
+      ctx.restore();
+    }
+
+    drawDivider(ctx, dividerX);
   }
 
-  function drawPane(
-    canvas: HTMLCanvasElement | undefined,
-    dpr: number,
-    paint: (ctx: CanvasRenderingContext2D) => void,
-  ): void {
-    if (!canvas || viewW < 1 || viewH < 1) return;
-    const pxW = Math.round(viewW * dpr);
-    const pxH = Math.round(viewH * dpr);
-    if (canvas.width !== pxW) canvas.width = pxW;
-    if (canvas.height !== pxH) canvas.height = pxH;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, viewW, viewH);
-    paint(ctx);
+  function drawSource(ctx: CanvasRenderingContext2D): void {
+    if (!src || !srcMeta) return;
+    const visW = viewW / zoom;
+    const visH = viewH / zoom;
+    const left = Math.max(0, originX);
+    const top = Math.max(0, originY);
+    const right = Math.min(outW, originX + visW);
+    const bottom = Math.min(outH, originY + visH);
+    const w = right - left;
+    const h = bottom - top;
+    if (w <= 0 || h <= 0) return;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(
+      src,
+      left / outScale,
+      top / outScale,
+      w / outScale,
+      h / outScale,
+      (left - originX) * zoom,
+      (top - originY) * zoom,
+      w * zoom,
+      h * zoom,
+    );
+  }
+
+  function drawDivider(ctx: CanvasRenderingContext2D, x: number): void {
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    ctx.fillRect(x - 1, 0, 2, viewH);
+    ctx.fillStyle = 'rgba(17,24,39,0.18)';
+    ctx.fillRect(x + 1, 0, 1, viewH);
+
+    const cy = viewH / 2;
+    ctx.beginPath();
+    ctx.arc(x, cy, 15, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.96)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(17,24,39,0.14)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(55,65,81,0.85)';
+    for (const dir of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(x + dir * 8, cy);
+      ctx.lineTo(x + dir * 3, cy - 4);
+      ctx.lineTo(x + dir * 3, cy + 4);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   function clampZoom(value: number): number {
@@ -190,57 +233,134 @@
     originY = clampOrigin(originY, outH, viewH / zoom);
   }
 
-  let dragging = false;
+  function panBy(dx: number, dy: number): void {
+    originX = clampOrigin(originX + dx, outW, viewW / zoom);
+    originY = clampOrigin(originY + dy, outH, viewH / zoom);
+  }
+
+  function zoomAbout(px: number, py: number, next: number): void {
+    const value = clampZoom(next);
+    if (value === zoom) return;
+    const outX = originX + px / zoom;
+    const outY = originY + py / zoom;
+    zoom = value;
+    originX = outX - px / zoom;
+    originY = outY - py / zoom;
+    clampOrigins();
+  }
+
+  const pointers = new Map<number, { x: number; y: number }>();
   let lastX = 0;
   let lastY = 0;
+  let lastDist = 0;
+  let lastMidX = 0;
+  let lastMidY = 0;
+
+  function toLocal(clientX: number, clientY: number): { x: number; y: number } {
+    const rect = stage?.getBoundingClientRect();
+    return { x: clientX - (rect?.left ?? 0), y: clientY - (rect?.top ?? 0) };
+  }
+
+  function capture(pointerId: number, on: boolean): void {
+    if (!stage) return;
+    try {
+      if (on) stage.setPointerCapture(pointerId);
+      else if (stage.hasPointerCapture(pointerId)) stage.releasePointerCapture(pointerId);
+    } catch {
+      /* pointer already released */
+    }
+  }
 
   function onPointerDown(event: PointerEvent) {
-    if (!srcMeta) return;
-    dragging = true;
-    lastX = event.clientX;
-    lastY = event.clientY;
-    event.currentTarget instanceof HTMLElement && event.currentTarget.setPointerCapture(event.pointerId);
+    if (!srcMeta || !stage) return;
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    capture(event.pointerId, true);
+
+    if (pointers.size === 1) {
+      const dividerX = dividerFrac * viewW;
+      if (Math.abs(toLocal(event.clientX, event.clientY).x - dividerX) <= 16) {
+        mode = 'divider';
+      } else {
+        mode = 'pan';
+        lastX = event.clientX;
+        lastY = event.clientY;
+      }
+    } else if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      mode = 'pinch';
+      lastDist = Math.hypot(b.x - a.x, b.y - a.y);
+      lastMidX = (a.x + b.x) / 2;
+      lastMidY = (a.y + b.y) / 2;
+    }
   }
 
   function onPointerMove(event: PointerEvent) {
-    if (!dragging) return;
-    originX = clampOrigin(originX - (event.clientX - lastX) / zoom, outW, viewW / zoom);
-    originY = clampOrigin(originY - (event.clientY - lastY) / zoom, outH, viewH / zoom);
-    lastX = event.clientX;
-    lastY = event.clientY;
+    if (!pointers.has(event.pointerId)) {
+      if (srcMeta) nearDivider = Math.abs(toLocal(event.clientX, event.clientY).x - dividerFrac * viewW) <= 16;
+      return;
+    }
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+    if (mode === 'pinch' && pointers.size >= 2) {
+      const [a, b] = [...pointers.values()];
+      const dist = Math.hypot(b.x - a.x, b.y - a.y);
+      const midX = (a.x + b.x) / 2;
+      const midY = (a.y + b.y) / 2;
+      const local = toLocal(midX, midY);
+      if (lastDist > 0) {
+        zoomAbout(local.x, local.y, zoom * (dist / lastDist));
+        panBy(-(midX - lastMidX) / zoom, -(midY - lastMidY) / zoom);
+      }
+      lastDist = dist;
+      lastMidX = midX;
+      lastMidY = midY;
+      return;
+    }
+
+    if (mode === 'divider') {
+      dividerFrac = Math.min(1, Math.max(0, toLocal(event.clientX, event.clientY).x / Math.max(1, viewW)));
+      return;
+    }
+
+    if (mode === 'pan') {
+      panBy(-(event.clientX - lastX) / zoom, -(event.clientY - lastY) / zoom);
+      lastX = event.clientX;
+      lastY = event.clientY;
+    }
   }
 
   function onPointerUp(event: PointerEvent) {
-    dragging = false;
-    if (event.currentTarget instanceof HTMLElement) {
-      event.currentTarget.releasePointerCapture(event.pointerId);
+    pointers.delete(event.pointerId);
+    capture(event.pointerId, false);
+    if (pointers.size === 0) {
+      mode = 'none';
+    } else if (pointers.size === 1) {
+      const [only] = [...pointers.values()];
+      lastX = only.x;
+      lastY = only.y;
+      mode = 'pan';
     }
   }
 
   function onWheel(event: WheelEvent) {
-    if (!srcMeta || !(event.currentTarget instanceof HTMLElement)) return;
+    if (!srcMeta) return;
     event.preventDefault();
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const px = event.clientX - bounds.left;
-    const py = event.clientY - bounds.top;
-    const next = clampZoom(zoom * Math.exp(-event.deltaY * 0.0015));
-    if (next === zoom) return;
-    const outX = originX + px / zoom;
-    const outY = originY + py / zoom;
-    zoom = next;
-    originX = outX - px / zoom;
-    originY = outY - py / zoom;
-    clampOrigins();
+    const local = toLocal(event.clientX, event.clientY);
+    zoomAbout(local.x, local.y, zoom * Math.exp(-event.deltaY * 0.0015));
   }
 
   function zoomToOne() {
     zoom = 1;
     clampOrigins();
   }
+
+  function resetDivider() {
+    dividerFrac = 0.5;
+  }
 </script>
 
 <div class="relative flex h-full min-h-0 flex-col bg-ink-100">
-  <header class="flex items-center justify-between gap-2 border-b border-ink-200 bg-white px-4 py-2">
+  <header class="flex items-center justify-between gap-2 border-b border-ink-200 bg-white px-3 py-2 sm:px-4">
     <div class="flex items-center gap-2">
       <span class="text-xs font-semibold text-ink-800">细节预览</span>
       {#if loading}
@@ -252,40 +372,40 @@
     </div>
     <div class="flex items-center gap-1">
       <span class="px-1 text-xs tabular-nums text-ink-500">{Math.round(zoom * 100)}%</span>
-      <button type="button" onclick={fit} class="rounded-md border border-ink-200 px-2 py-0.5 text-xs text-ink-600 hover:border-brand-500 hover:text-brand-600">适应</button>
-      <button type="button" onclick={zoomToOne} class="rounded-md border border-ink-200 px-2 py-0.5 text-xs text-ink-600 hover:border-brand-500 hover:text-brand-600">1:1</button>
+      <button type="button" onclick={fit} class="rounded-md border border-ink-200 px-2 py-1 text-xs text-ink-600 transition hover:border-brand-500 hover:text-brand-600">适应</button>
+      <button type="button" onclick={zoomToOne} class="rounded-md border border-ink-200 px-2 py-1 text-xs text-ink-600 transition hover:border-brand-500 hover:text-brand-600">1:1</button>
+      <button type="button" onclick={resetDivider} class="rounded-md border border-ink-200 px-2 py-1 text-xs text-ink-600 transition hover:border-brand-500 hover:text-brand-600">中线</button>
     </div>
   </header>
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="grid min-h-0 flex-1 grid-cols-2 gap-px overflow-hidden bg-ink-200"
+    bind:this={stage}
     bind:clientWidth={viewW}
     bind:clientHeight={viewH}
+    class="checkerboard relative min-h-0 flex-1 touch-none overflow-hidden {cursor}"
     onpointerdown={onPointerDown}
     onpointermove={onPointerMove}
     onpointerup={onPointerUp}
     onpointercancel={onPointerUp}
+    onpointerleave={() => (nearDivider = false)}
+    onwheel={onWheel}
   >
-    <div class="checkerboard relative overflow-hidden">
-      <canvas bind:this={canvasL} class="block h-full w-full"></canvas>
-      <span class="pointer-events-none absolute left-2 top-2 rounded bg-ink-900/70 px-1.5 py-0.5 text-[10px] text-white">原图</span>
-    </div>
-    <div class="checkerboard relative overflow-hidden" onwheel={onWheel}>
-      <canvas bind:this={canvasR} class="block h-full w-full"></canvas>
-      <span class="pointer-events-none absolute left-2 top-2 rounded bg-brand-500/80 px-1.5 py-0.5 text-[10px] text-white">
-        {#if job}{FORMAT_LABELS[job.params.format]}{/if}
-      </span>
-    </div>
+    <canvas bind:this={canvas} class="block h-full w-full"></canvas>
+
+    <span class="pointer-events-none absolute left-2 top-2 rounded bg-ink-900/70 px-1.5 py-0.5 text-[10px] text-white">原图</span>
+    <span class="pointer-events-none absolute right-2 top-2 rounded bg-brand-500/80 px-1.5 py-0.5 text-[10px] text-white">
+      {#if job}{FORMAT_LABELS[job.params.format]}{/if}
+    </span>
+
+    {#if !job}
+      <div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-ink-100/80">
+        <p class="text-xs text-ink-400">选择一张图片查看细节预览</p>
+      </div>
+    {/if}
   </div>
 
-  {#if !job}
-    <div class="pointer-events-none absolute inset-0 flex items-center justify-center bg-ink-100/80">
-      <p class="text-xs text-ink-400">选择一张图片查看细节预览</p>
-    </div>
-  {/if}
-
-  <footer class="border-t border-ink-200 bg-white px-4 py-1.5 text-[11px] text-ink-400">
-    滚轮缩放 · 拖拽平移 · 右侧为同参数管线的裁剪预览，视觉上与产物一致
+  <footer class="border-t border-ink-200 bg-white px-3 py-1.5 text-[11px] text-ink-400 sm:px-4">
+    滚轮或双指缩放 · 拖拽平移 · 拖动中线左右对比
   </footer>
 </div>

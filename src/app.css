@@ -23,8 +23,14 @@ body,
   height: 100%;
 }
 
+#app {
+  height: 100dvh;
+}
+
 body {
   margin: 0;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
   font-family: system-ui, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   background: var(--color-ink-100);
   color: var(--color-ink-900);

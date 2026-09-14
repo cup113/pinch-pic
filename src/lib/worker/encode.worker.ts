@@ -9,6 +9,8 @@ scope.onmessage = async (event) => {
   const { jobId, requestId, file, params } = event.data;
   try {
     const source = await decodeToBitmap(file);
+    const sourceWidth = source.width;
+    const sourceHeight = source.height;
     const { outW, outH } = planResize(source, params.maxEdge);
     const scaled = await resizeBitmap(source, outW, outH);
     if (scaled !== source) source.close();
@@ -27,6 +29,8 @@ scope.onmessage = async (event) => {
       meta: {
         width: outW,
         height: outH,
+        sourceWidth,
+        sourceHeight,
         size: file.size,
         type: file.type,
         firstFrameOnly: file.type === 'image/gif',
