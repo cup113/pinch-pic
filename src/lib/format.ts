@@ -15,7 +15,14 @@ export function savingsPercent(originalSize: number, artifactSize: number): numb
   return ((originalSize - artifactSize) / originalSize) * 100;
 }
 
-export function formatPercent(value: number): string {
+export function savingsLabel(value: number): string {
   const rounded = Math.round(value);
-  return `${rounded > 0 ? '-' : '+'}${Math.abs(rounded)}%`;
+  if (rounded === 0) return '±0%';
+  return `${rounded > 0 ? '省' : '增'} ${Math.abs(rounded)}%`;
+}
+
+export function savingsTone(value: number): string {
+  const rounded = Math.round(value);
+  if (rounded === 0) return 'text-ink-400';
+  return rounded > 0 ? 'text-emerald-600' : 'text-red-500';
 }

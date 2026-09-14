@@ -14,7 +14,7 @@ export const FORMAT_LABELS: Record<OutputFormat, string> = {
 };
 
 export const FORMAT_EXTENSIONS: Record<OutputFormat, string> = {
-  jpeg: 'jpg',
+  jpeg: 'jpeg',
   webp: 'webp',
   avif: 'avif',
   png: 'png',
@@ -36,7 +36,7 @@ export interface CompressParams {
 }
 
 export const DEFAULT_PARAMS: CompressParams = {
-  format: 'webp',
+  format: 'jpeg',
   quality: 80,
   effort: 2,
   maxEdge: null,

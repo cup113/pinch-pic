@@ -185,9 +185,6 @@
     </div>
 
     {@render qualityOrEffort()}
-    {#if !lossy}
-      <p class="-mt-3 text-xs text-ink-400">PNG 为无损，只优化体积，不损失画质。</p>
-    {/if}
 
     <div class="space-y-3">
       <div class="flex items-baseline justify-between">
@@ -211,10 +208,9 @@
             oninput={(event) => setMaxEdge(event.currentTarget.value)}
             class="w-24 rounded-lg border border-ink-200 px-2 py-1 text-sm tabular-nums outline-none focus:border-brand-500"
           />
-          <span class="text-xs text-ink-400">px · 留空 = 原尺寸</span>
+          <span class="text-xs text-ink-400">px</span>
         </div>
         {@render edgeChips(true)}
-        <p class="text-xs text-ink-400">只缩不放，等比不留白。</p>
       {:else}
         <p class="text-xs text-ink-400">正在测量原图尺寸…</p>
       {/if}
@@ -230,13 +226,9 @@
         />
         <span class="text-xs text-ink-600">
           保留 EXIF 元数据（含 GPS、拍摄参数）
-          <span class="mt-0.5 block text-ink-400">仅 JPEG 输出支持；不勾选则全部抹除，方向已烘进像素。</span>
+          <span class="mt-0.5 block text-ink-400">默认抹除（含 GPS），方向已烘正。</span>
         </span>
       </label>
-    {:else}
-      <p class="rounded-lg bg-ink-50 p-3 text-xs text-ink-400">
-        默认已抹除全部元数据（含 GPS）；保留 EXIF 仅 JPEG 输出支持。
-      </p>
     {/if}
   </div>
 {/if}

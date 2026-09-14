@@ -1,7 +1,7 @@
 <script lang="ts">
   import { jobStore } from '../stores/jobs.svelte';
   import { artifactName, buildZip, downloadBlob } from '../download';
-  import { formatBytes, formatPercent, savingsPercent } from '../format';
+  import { formatBytes, savingsLabel, savingsTone, savingsPercent } from '../format';
   import { FORMAT_LABELS, type ImageJob } from '../types';
 
   let { onselect }: { onselect?: () => void } = $props();
@@ -27,7 +27,7 @@
   <header class="flex flex-wrap items-center justify-between gap-2 border-b border-ink-200 px-4 py-3">
     <div>
       <h2 class="text-sm font-semibold text-ink-900">
-        作业 <span class="font-normal text-ink-400">{jobStore.jobs.length}</span>
+        图片 <span class="font-normal text-ink-400">{jobStore.jobs.length}</span>
       </h2>
       {#if jobStore.jobs.length > 0}
         <p class="mt-0.5 text-xs tabular-nums text-ink-500">
@@ -80,11 +80,10 @@
                 <span class="block truncate text-sm text-ink-900">{job.file.name}</span>
                 <span class="mt-0.5 block text-xs tabular-nums text-ink-500">
                   {#if job.status === 'done' && job.artifactSize !== null}
+                    {@const savings = savingsPercent(job.file.size, job.artifactSize)}
                     <s>{formatBytes(job.file.size)}</s>
                     → {formatBytes(job.artifactSize)}
-                    <span class="ml-1 text-emerald-600">
-                      {formatPercent(savingsPercent(job.file.size, job.artifactSize))}
-                    </span>
+                    <span class="ml-1 {savingsTone(savings)}">{savingsLabel(savings)}</span>
                   {:else if job.status === 'error'}
                     <span class="text-red-500">{job.error}</span>
                   {:else}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import InfoPopover from './lib/components/InfoPopover.svelte';
   import JobList from './lib/components/JobList.svelte';
   import ParamPanel from './lib/components/ParamPanel.svelte';
   import PreviewPane from './lib/components/PreviewPane.svelte';
@@ -7,7 +8,7 @@
 
   type Tab = 'jobs' | 'preview' | 'params';
   const TABS: { id: Tab; label: string }[] = [
-    { id: 'jobs', label: '作业' },
+    { id: 'jobs', label: '图片' },
     { id: 'preview', label: '预览' },
     { id: 'params', label: '参数' },
   ];
@@ -61,11 +62,9 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="flex h-full flex-col" ondragenter={onDragEnter} ondragleave={onDragLeave}>
   <header class="flex items-center justify-between gap-2 border-b border-ink-200 bg-white px-3 py-2.5 sm:px-4 sm:py-3">
-    <div class="flex min-w-0 items-baseline gap-3">
+    <div class="flex min-w-0 items-center gap-2">
       <h1 class="text-base font-semibold tracking-tight text-ink-900">pinch-pic</h1>
-      <span class="hidden truncate text-xs text-ink-400 sm:inline">
-        WASM 本地编码 · 文件不出本机 · 默认抹除元数据
-      </span>
+      <InfoPopover />
     </div>
     <div class="flex shrink-0 items-center gap-1">
       <button
@@ -136,7 +135,7 @@
   {#if dragging}
     <div class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-brand-500/10 backdrop-blur-sm">
       <p class="rounded-xl border-2 border-dashed border-brand-500 bg-white/90 px-8 py-6 text-sm font-medium text-brand-600">
-        松手即可加入队列
+        松手即可添加
       </p>
     </div>
   {/if}

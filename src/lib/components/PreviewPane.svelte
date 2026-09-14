@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
   import { artifactName, downloadBlob } from '../download';
-  import { formatBytes, formatPercent, savingsPercent } from '../format';
+  import { formatBytes, savingsLabel, savingsTone, savingsPercent } from '../format';
   import { decodeToBitmap, planResize } from '../pipeline';
   import { PreviewSession } from '../previewSession';
   import { jobStore } from '../stores/jobs.svelte';
@@ -24,13 +24,13 @@
   let preview = $state<{ bitmap: ImageBitmap; rect: CropRect } | null>(null);
   let error = $state<string | null>(null);
   let loading = $state(false);
-  let needsFit = $state(false);
 
   let canvas = $state<HTMLCanvasElement | undefined>();
   let stage = $state<HTMLDivElement | undefined>();
 
   const session = new PreviewSession();
   let loadedJobId: string | null = null;
+  let srcJobId: string | null = null;
   let lastOutW = 0;
   let lastOutH = 0;
 
@@ -73,20 +73,29 @@
   });
 
   $effect(() => {
-    if (needsFit && srcMeta && viewW > 0 && viewH > 0) {
-      fit();
-      needsFit = false;
-    }
-  });
-
-  $effect(() => {
+    const current = job;
+    if (!current || !srcMeta || viewW < 1 || viewH < 1) return;
+    if (srcJobId !== current.id) return;
     const w = outW;
     const h = outH;
     if (w < 1 || h < 1) return;
+
+    if (lastOutW < 1) {
+      lastOutW = w;
+      lastOutH = h;
+      fit();
+      return;
+    }
+
     if (w === lastOutW && h === lastOutH) return;
+
+    const grow = w / lastOutW;
+    zoom = clampZoom(zoom / grow);
+    originX *= grow;
+    originY *= grow;
     lastOutW = w;
     lastOutH = h;
-    needsFit = true;
+    clampOrigins();
   });
 
   $effect(() => {
@@ -104,6 +113,8 @@
     error = null;
     loading = true;
     preview = null;
+    lastOutW = 0;
+    lastOutH = 0;
     session.select(id, current.file);
     try {
       const bitmap = await decodeToBitmap(current.file);
@@ -114,8 +125,8 @@
       src?.close();
       src = bitmap;
       srcMeta = { width: bitmap.width, height: bitmap.height };
+      srcJobId = id;
       jobStore.setSourceDims(id, bitmap.width, bitmap.height);
-      needsFit = true;
     } catch (err) {
       error = err instanceof Error ? err.message : String(err);
     } finally {
@@ -126,7 +137,7 @@
   function fit(): void {
     if (!srcMeta) return;
     const current = planResize(srcMeta, job?.params.maxEdge ?? null);
-    const z = Math.min(viewW / current.outW, viewH / current.outH, 1);
+    const z = Math.min(viewW / current.outW, viewH / current.outH);
     zoom = clampZoom(z);
     originX = (current.outW - viewW / zoom) / 2;
     originY = (current.outH - viewH / zoom) / 2;
@@ -391,9 +402,10 @@
     </div>
     <div class="flex items-center gap-2">
       {#if job && job.artifactSize !== null}
+        {@const savings = savingsPercent(job.file.size, job.artifactSize)}
         <span class="text-xs tabular-nums text-ink-500">
           {formatBytes(job.artifactSize)}
-          <span class="text-emerald-600">{formatPercent(savingsPercent(job.file.size, job.artifactSize))}</span>
+          <span class={savingsTone(savings)}>{savingsLabel(savings)}</span>
         </span>
       {:else if job}
         <span class="text-xs text-ink-400">压缩中…</span>
@@ -442,10 +454,7 @@
     </div>
   {/if}
 
-  <footer class="flex items-center justify-between gap-2 border-t border-ink-200 bg-white px-3 py-1.5 sm:px-4">
-    <span class="hidden truncate text-[11px] text-ink-400 sm:block">
-      滚轮或双指缩放 · 拖拽平移 · 拖动中线左右对比
-    </span>
+  <footer class="flex items-center justify-end gap-2 border-t border-ink-200 bg-white px-3 py-1.5 sm:px-4">
     <div class="flex items-center gap-1">
       <span class="px-1 text-xs tabular-nums text-ink-500">{Math.round(zoom * 100)}%</span>
       <button type="button" onclick={fit} class="rounded-md border border-ink-200 px-2 py-1 text-xs text-ink-600 transition hover:border-brand-500 hover:text-brand-600">适应</button>
